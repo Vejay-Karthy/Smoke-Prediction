@@ -1,0 +1,122 @@
+import sys
+import tensorflow as tf
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import OneHotEncoder
+from keras.models import Model
+from keras.models import Sequential
+from keras.layers import LSTM, Activation, Dense, Dropout, Input, Embedding
+from keras.optimizers import RMSprop
+from keras.preprocessing import sequence
+from keras.utils import to_categorical
+from keras.callbacks import EarlyStopping
+from keras.callbacks import ModelCheckpoint
+
+from google.colab import drive
+drive.mount('/content/gdrive/')
+with open('/content/gdrive/My Drive/SS Lab/sample1/smoke_features2.csv', 'r') as f:
+  df = pd.read_csv(f,delimiter=',',encoding='latin-1')
+  
+
+#data loading
+
+#pd.read_excel('excel_file.xlsx', sheetname=None)
+
+
+
+#df = pd.read_csv(f,delimiter=',',encoding='latin-1')
+#print('DATAFRAME', df)
+#df.drop(['sl.no.'],axis=1,inplace=True)
+df.info()
+print(df.shape)
+df=df[['Presence_of_Smoke','Area','Difference','ROG','Severity']]
+print('DATAFRAME', df)
+
+##plot and visualize the data
+#sns.countplot(df.Occupancy)
+#plt.xlabel('Label')
+#plt.title('Number of ham and 0 and 1 Occupancies')
+
+
+##create input and output vectors
+X = df.iloc[:,0:4]
+print('input vector', np.min(X))
+print(np.max(X))
+#X = np.int32(X)
+Y = df.iloc[:,4]
+#print('output vector', Y)
+#print(X)
+X = X.values.reshape(1467, 4)
+Y = Y.values.reshape(1467, 1)
+
+#print(Y)
+from keras.utils import to_categorical
+Y = to_categorical(Y)
+print(Y)
+print(X[:][:])
+
+
+##one hot encoding
+###onehotencoder = OneHotEncoder()
+###Y = onehotencoder.fit_transform(Y).toarray()
+#print(X.shape)
+#print('onehot, X)
+#rint("AFTER ENCODING", X)
+
+#print(X)
+
+
+
+
+total_rows = 1467 * 4
+max_len=4
+
+
+## splitting of training and testing data
+## Padding of input data into equal sequences
+X_train,X_test,Y_train,Y_test = train_test_split(X,Y,test_size=0.20)
+#X_train = sequence.pad_sequences(X_train, maxlen=max_len)
+#X_test = sequence.pad_sequences(X_test, maxlen=max_len)
+
+#print(X_train.shape)
+#print(X_train)
+print(Y_train.shape)
+print(Y_train)
+X_train = np.reshape(X_train, (X_train.shape[0], 1, X_train.shape[1]))
+X_test = np.reshape(X_test, (X_test.shape[0], 1, X_test.shape[1]))
+print(X_train.shape)
+print(X_train)
+print(Y_test.shape)
+print(Y_test)
+print(X_test.shape)
+print(X_test)
+
+# create the model
+embedding_vecor_length = 1
+model = Sequential()
+#model.add(Embedding(4, 1, input_length=max_len))
+model.add(LSTM(32, return_sequences=True, input_shape=(1,4)))
+model.add(LSTM(32, return_sequences=True))
+model.add(LSTM(32, return_sequences=True))
+model.add(LSTM(32, return_sequences=True))
+model.add(LSTM(32))
+
+#sparse_categorical_crossentropy
+
+model.add(Dense(3, activation='softmax'))
+model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+#checkpoint
+filepath="weights.best.hdf5"
+checkpoint = ModelCheckpoint(filepath, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
+callbacks_list = [checkpoint]
+
+model.fit(X_train, Y_train, validation_data=(X_test, Y_test), epochs=20, batch_size=12,callbacks=callbacks_list)
+
+model.summary()
+scores = model.evaluate(X_test, Y_test, verbose=2)
+print("Accuracy: %.2f%%" % (scores[1]*100))
+#model.predict(X_test,verbose=1)
+model.predict_classes(X_test,verbose=1)
