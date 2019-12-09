@@ -1,3 +1,10 @@
+"""
+Created on Sun Oct 25 18:07:38 2019
+
+@author: Vejay Karthy S
+"""
+
+
 import sys
 import tensorflow as tf
 import numpy as np
@@ -8,115 +15,236 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
 from keras.models import Model
 from keras.models import Sequential
-from keras.layers import LSTM, Activation, Dense, Dropout, Input, Embedding
+from keras.layers import LSTM, Activation, Dense, Dropout, Input, Embedding, GRU, Conv1D, MaxPooling1D, Flatten, SimpleRNN
 from keras.optimizers import RMSprop
 from keras.preprocessing import sequence
 from keras.utils import to_categorical
 from keras.callbacks import EarlyStopping
 from keras.callbacks import ModelCheckpoint
+from keras import metrics
 
+
+# Please change drive location as required
 from google.colab import drive
 drive.mount('/content/gdrive/')
-with open('/content/gdrive/My Drive/SS Lab/sample1/smoke_features2.csv', 'r') as f:
+with open('/content/gdrive/My Drive/SS Lab/Copyofsmoke_features_final11.csv', 'r') as f:
   df = pd.read_csv(f,delimiter=',',encoding='latin-1')
   
 
-#data loading
+sess1 = tf.Session()
 
-#pd.read_excel('excel_file.xlsx', sheetname=None)
-
-
-
-#df = pd.read_csv(f,delimiter=',',encoding='latin-1')
-#print('DATAFRAME', df)
-#df.drop(['sl.no.'],axis=1,inplace=True)
 df.info()
 print(df.shape)
-df=df[['Presence_of_Smoke','Area','Difference','ROG','Severity']]
-print('DATAFRAME', df)
+df=df[['Presence_of_Smoke','Area','ROG','Color','Severity1']]
 
-##plot and visualize the data
-#sns.countplot(df.Occupancy)
-#plt.xlabel('Label')
-#plt.title('Number of ham and 0 and 1 Occupancies')
 
 
 ##create input and output vectors
 X = df.iloc[:,0:4]
-print('input vector', np.min(X))
-print(np.max(X))
-#X = np.int32(X)
 Y = df.iloc[:,4]
-#print('output vector', Y)
-#print(X)
-X = X.values.reshape(1467, 4)
+print(X.shape)
+X = X.values.reshape(1467, 4, 1)
 Y = Y.values.reshape(1467, 1)
 
-#print(Y)
+
+Z = Y
 from keras.utils import to_categorical
 Y = to_categorical(Y)
-print(Y)
-print(X[:][:])
-
-
-##one hot encoding
-###onehotencoder = OneHotEncoder()
-###Y = onehotencoder.fit_transform(Y).toarray()
-#print(X.shape)
-#print('onehot, X)
-#rint("AFTER ENCODING", X)
-
-#print(X)
-
-
-
-
 total_rows = 1467 * 4
 max_len=4
 
 
 ## splitting of training and testing data
-## Padding of input data into equal sequences
+X_train,X_test,Z_train,Z_test = train_test_split(X,Z,test_size=0.20)
 X_train,X_test,Y_train,Y_test = train_test_split(X,Y,test_size=0.20)
-#X_train = sequence.pad_sequences(X_train, maxlen=max_len)
-#X_test = sequence.pad_sequences(X_test, maxlen=max_len)
 
-#print(X_train.shape)
-#print(X_train)
-print(Y_train.shape)
-print(Y_train)
 X_train = np.reshape(X_train, (X_train.shape[0], 1, X_train.shape[1]))
 X_test = np.reshape(X_test, (X_test.shape[0], 1, X_test.shape[1]))
-print(X_train.shape)
-print(X_train)
-print(Y_test.shape)
-print(Y_test)
-print(X_test.shape)
-print(X_test)
 
-# create the model
+#CNN
+model2 = Sequential()
+model2.add(Conv1D(filters=256, kernel_size = 1, activation='tanh', input_shape=(1,4)))#256
+model2.add(Conv1D(filters=128, kernel_size = 1, activation='tanh'))#128
+model2.add(Conv1D(filters=64, kernel_size = 1, activation='tanh'))#64
+model2.add(Conv1D(filters=32, kernel_size = 1, activation='tanh'))#32
+model2.add(MaxPooling1D(pool_size=1))
+model2.add(Flatten())
+'''
+model2.add(Conv1D(128, dropout=0.3, return_sequences=True)) #128
+model2.add(Conv1D(64, dropout=0.3, return_sequences=True)) #64
+model2.add(Conv1D(32))#32
+'''
+model2.add(Dense(100, activation='relu'))
+model2.add((Dense(3, activation='softmax')))
+model2.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+#checkpoint
+filepath="weights.best.hdf5"
+checkpoint = ModelCheckpoint(filepath, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
+callbacks_list = [checkpoint]
+
+predicted2= model2.fit(X_train, Y_train, validation_data=(X_test, Y_test), epochs=100, batch_size=12,callbacks=callbacks_list)
+
+model2.summary()
+scores = model2.evaluate(X_test, Y_test, verbose=2)
+print("Accuracy: %.2f%%" % (scores[1]*100))
+predicted_classes = model2.predict_classes(X_test,verbose=1)
+print(predicted_classes.shape)
+print(predicted_classes)
+probs2 = model2.predict_proba(X_test)
+
+top_k2 = metrics.top_k_categorical_accuracy(Y_test,probs2,k=2)
+top_k_array2 = top_k2.eval(session=sess1)
+print(top_k_array2)
+print(top_k2)
+
+#create model (RNN)
+model3 = Sequential()
+model3.add(SimpleRNN(256, dropout=0.3, return_sequences=True, input_shape=(1,4)))#256
+model3.add(SimpleRNN(128, dropout=0.3, return_sequences=True)) #128
+model3.add(SimpleRNN(64, dropout=0.3, return_sequences=True)) #64
+model3.add(SimpleRNN(32))#32
+
+'''
+#(For Single Layer)
+model3.add(SimpleRNN(128, dropout=0.3, return_sequences=True, input_shape=(1,4))) 
+model3.add(SimpleRNN(128))
+'''
+
+model3.add((Dense(3, activation='softmax')))
+model3.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+#checkpoint
+filepath="weights.best.hdf5"
+checkpoint = ModelCheckpoint(filepath, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
+callbacks_list = [checkpoint]
+
+predicted3= model3.fit(X_train, Y_train, validation_data=(X_test, Y_test), epochs=100, batch_size=12,callbacks=callbacks_list)
+
+model3.summary()
+scores = model3.evaluate(X_test, Y_test, verbose=2)
+print("Accuracy: %.2f%%" % (scores[1]*100))
+predicted_classes = model3.predict_classes(X_test,verbose=1)
+print(predicted_classes.shape)
+print(predicted_classes)
+probs3 = model3.predict_proba(X_test)
+
+top_k3 = metrics.top_k_categorical_accuracy(Y_test,probs3,k=2)
+top_k_array3 = top_k3.eval(session=sess1)
+print(top_k_array3)
+print(top_k3)
+
+
+#create model (GRU)
+# For stacked Layer
+model1 = Sequential()
+model1.add(GRU(256, dropout=0.3, return_sequences=True, input_shape=(1,4)))#256
+model1.add(GRU(128, dropout=0.3, return_sequences=True)) #128
+model1.add(GRU(64, dropout=0.3, return_sequences=True)) #64
+model1.add(GRU(32))#32
+
+'''
+(For Single Layer)
+model1.add(GRU(128, dropout=0.3, return_sequences=True, input_shape=(1,4))) 
+model1.add(GRU(128))
+'''
+
+model1.add((Dense(3, activation='softmax')))
+model1.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+#checkpoint
+filepath="weights.best.hdf5"
+checkpoint = ModelCheckpoint(filepath, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
+callbacks_list = [checkpoint]
+
+predicted= model1.fit(X_train, Y_train, validation_data=(X_test, Y_test), epochs=100, batch_size=12,callbacks=callbacks_list)
+
+model1.summary()
+scores = model1.evaluate(X_test, Y_test, verbose=2)
+print("Accuracy: %.2f%%" % (scores[1]*100))
+predicted_classes = model1.predict_classes(X_test,verbose=1)
+print(predicted_classes.shape)
+print(predicted_classes)
+probs1 = model1.predict_proba(X_test)
+
+top_k1 = metrics.top_k_categorical_accuracy(Y_test,probs1,k=2)
+top_k_array1 = top_k1.eval(session=sess1)
+print(top_k_array1)
+print(top_k1)
+
+# create the model (LSTM)
+# For stacked Layer
 embedding_vecor_length = 1
 model = Sequential()
-#model.add(Embedding(4, 1, input_length=max_len))
-model.add(LSTM(32, return_sequences=True, input_shape=(1,4)))
-model.add(LSTM(32, return_sequences=True))
-model.add(LSTM(32, return_sequences=True))
-model.add(LSTM(32, return_sequences=True))
-model.add(LSTM(32))
+model.add(LSTM(256, dropout=0.3, return_sequences=True, input_shape=(1,4))) #256
+model.add(LSTM(128, dropout=0.3, return_sequences=True)) #128
+model.add(LSTM(64, dropout=0.3, return_sequences=True)) #64
+model.add(LSTM(32)) #32
 
-#sparse_categorical_crossentropy
+'''
+(For Single Layer)
+model.add(LSTM(128, dropout=0.3, return_sequences=True, input_shape=(1,4))) 
+model.add(LSTM(128))
+'''
 
-model.add(Dense(3, activation='softmax'))
+
+
+model.add((Dense(3, activation='softmax')))
 model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
 #checkpoint
 filepath="weights.best.hdf5"
 checkpoint = ModelCheckpoint(filepath, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
 callbacks_list = [checkpoint]
 
-model.fit(X_train, Y_train, validation_data=(X_test, Y_test), epochs=20, batch_size=12,callbacks=callbacks_list)
+predicted1= model.fit(X_train, Y_train, validation_data=(X_test, Y_test), epochs=100, batch_size=12,callbacks=callbacks_list)
 
 model.summary()
-scores = model.evaluate(X_test, Y_test, verbose=2)
-print("Accuracy: %.2f%%" % (scores[1]*100))
-#model.predict(X_test,verbose=1)
-model.predict_classes(X_test,verbose=1)
+scores1 = model.evaluate(X_test, Y_test, verbose=2)
+print("Accuracy: %.2f%%" % (scores1[1]*100))
+predicted_classes = model.predict_classes(X_test,verbose=1)
+print(predicted_classes.shape)
+print(predicted_classes)
+probs = model.predict_proba(X_test)
+
+top_k = metrics.top_k_categorical_accuracy(Y_test,probs,k=2)
+top_k_array = top_k.eval(session=sess1)
+print(top_k_array)
+print(top_k)
+
+print(predicted.history.keys())
+plt.plot(predicted.history['acc'])
+plt.plot(predicted1.history['acc'])
+plt.plot(predicted2.history['acc'])
+plt.plot(predicted3.history['acc'])
+plt.title('model accuracy')
+plt.ylabel('accuracy')
+plt.xlabel('epoch')
+plt.legend(['GRU', 'LSTM', 'CNN', 'RNN'], loc='lower right')
+plt.show()
+
+plt.plot(predicted.history['val_acc'])
+plt.plot(predicted1.history['val_acc'])
+plt.plot(predicted2.history['val_acc'])
+plt.plot(predicted3.history['val_acc'])
+plt.title('model accuracy during validation')#during validation
+plt.ylabel('accuracy')
+plt.xlabel('epoch')
+plt.legend(['GRU', 'LSTM', 'CNN','RNN'], loc='lower right')
+plt.show()
+
+plt.plot(predicted.history['loss'])
+plt.plot(predicted1.history['loss'])
+plt.plot(predicted2.history['loss'])
+plt.plot(predicted3.history['loss'])
+plt.title('model loss')
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['GRU', 'LSTM', 'CNN','RNN'], loc='upper right')
+plt.show()
+
+plt.plot(predicted.history['val_loss'])
+plt.plot(predicted1.history['val_loss'])
+plt.plot(predicted2.history['val_loss'])
+plt.plot(predicted3.history['val_loss'])
+plt.title('model loss during validation')#during validation
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['GRU', 'LSTM', 'CNN','RNN'], loc='upper right')
+plt.show()
